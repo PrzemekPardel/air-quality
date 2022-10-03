@@ -26,9 +26,6 @@
  * @author przemyslaw.pardel@gmail.com
  * References: 
  *  - https://wiki.dfrobot.com/PM2.5_laser_dust_sensor_SKU_SEN0177
- *  - https://wiki.dfrobot.com/1.54%20Inches%20240_240_IPS_TFT_LCD_Display_with_MicroSD_Card_Breakout_SKU_DFR0649
- *  - https://www.dfrobot.com/blog-910.html
- *  - https://www.dfrobot.com/product-1102.html
  */
 #include <Arduino.h>
 #include <SoftwareSerial.h>
@@ -62,9 +59,19 @@ SoftwareSerial PMSerial(7, 8); // RX, TX
 double PM1Value = 0;          //define PM1.0 value of the air detector module
 double PM2_5Value = 0;         //define PM2.5 value of the air detector module
 double PM10Value = 0;         //define PM10 value of the air detector module
+double oldPM1Value = 9;          //define old PM1.0 value of the air detector module
+double oldPM2_5Value = 9;         //define old PM2.5 value of the air detector module
+double oldPM10Value = 9;         //define old PM10 value of the air detector module
+
+String AQI = "0";
+double oldHumidity = 0;
+double oldTemperature = 0;
 
 void setup()
 { 
+  //PIN to PM sensor
+  pinMode(5, OUTPUT);
+  digitalWrite(5, HIGH); //turn on PM sensor
   PMSerial.begin(9600);
   PMSerial.setTimeout(1500);
   //Setup serial port
@@ -72,7 +79,7 @@ void setup()
   //Setup screen
   screen.begin();
   loadStaticDesign();
-
+  // digitalWrite(5, LOW); 
   //setup temperature and humifdity sensor
   dht.setup(6, DHTesp::DHT22); // 6 - temperature and humifdity sensor digital pin
 }
@@ -92,10 +99,10 @@ void loadStaticDesign(){
   //Other
   printText(0, 105, COLOR_RGB565_WHITE, 2, "PM1 :");
   //printText(60, 105, COLOR_RGB565_WHITE, 2, "0");
-  printText(100, 105, COLOR_RGB565_WHITE, 1, "ug/m3");
+  printText(115, 105, COLOR_RGB565_WHITE, 1, "ug/m3");
   printText(0, 130, COLOR_RGB565_WHITE, 2, "PM10:");
   //printText(60, 130, COLOR_RGB565_WHITE, 2, "0");
-  printText(100, 130, COLOR_RGB565_WHITE, 1, "ug/m3");
+  printText(115, 130, COLOR_RGB565_WHITE, 1, "ug/m3");
   printText(0, 155, COLOR_RGB565_WHITE, 2, "Tmp.:");
   //printText(60, 155, COLOR_RGB565_WHITE, 2, "0.0");
   printText(120, 155, COLOR_RGB565_WHITE, 1, "oC");
@@ -125,6 +132,7 @@ void printText(byte  cursorX, byte  cursorY, int color, byte  textSize, String t
 
 void loop()
 {
+  digitalWrite(5, HIGH); //turn on PM sensor
   #define LENG 31   //0x42 + 31 bytes equal to 32 bytes
   unsigned char buf[LENG];
   // Read data from sensors
@@ -135,8 +143,7 @@ void loop()
       if(checkValue(buf,LENG)){
         PM1Value=transmitPM01(buf); //count PM1.0 value of the air detector module
         PM2_5Value=transmitPM2_5(buf);//count PM2.5 value of the air detector module
-        PM10Value=transmitPM10(buf); //count PM10 value of the air detector module
-      
+        PM10Value=transmitPM10(buf); //count PM10 value of the air detector module 
       }
     }
   }
@@ -151,88 +158,125 @@ void loop()
 }
 
 void refreshData(){
+  //!!!Refresh only those values which changes!!! This avoid screen blinking !!!
+  String strval = "";
   //PM 2.5
-  screen.fillRect(100,30,120,35, COLOR_RGB565_BLACK);
-  String strval = String(PM2_5Value,0);
-  printText(100, 30, COLOR_RGB565_WHITE, 5, strval);
+  if (oldPM2_5Value != PM2_5Value){
+    screen.fillRect(100,30,120,35, COLOR_RGB565_BLACK);
+    strval = String(PM2_5Value,0);
+    oldPM2_5Value = PM2_5Value;
+    printText(100, 30, COLOR_RGB565_WHITE, 5, strval);
+  }
   Serial.println("PM2.5: " + strval);
   //Other
   //PM1
-  screen.fillRect(60,105,38,20, COLOR_RGB565_BLACK);
-  strval = String(PM1Value,0);
-  printText(60, 105, COLOR_RGB565_WHITE, 2, strval);
+  if (oldPM1Value != PM1Value){
+    screen.fillRect(60,105,55,20, COLOR_RGB565_BLACK);
+    strval = String(PM1Value,0);
+    oldPM1Value = PM1Value;
+    printText(60, 105, COLOR_RGB565_WHITE, 2, strval);
+  }
   Serial.println("PM1.0: " + strval);
   //PM10
-  screen.fillRect(60,130,38,20, COLOR_RGB565_BLACK);
-  strval = String(PM10Value,0);
-  printText(60, 130, COLOR_RGB565_WHITE, 2, strval);
+  if (oldPM10Value != PM10Value){
+    screen.fillRect(60,130,55,20, COLOR_RGB565_BLACK);
+    strval = String(PM10Value,0);
+    oldPM10Value = PM10Value;
+    printText(60, 130, COLOR_RGB565_WHITE, 2, strval);
+  }
   Serial.println("PM10: " + strval);
   //Temperature and humidity
-  screen.fillRect(60,155,58,20, COLOR_RGB565_BLACK);
-  screen.fillRect(0,200,78,20, COLOR_RGB565_BLACK);
   TempAndHumidity measurement = dht.getTempAndHumidity();
-  strval = String(measurement.temperature,1);
-  printText(60, 155, COLOR_RGB565_WHITE, 2, strval);
+  if (oldTemperature != measurement.temperature){
+    screen.fillRect(60,155,58,20, COLOR_RGB565_BLACK);
+    strval = String(measurement.temperature,1);
+    oldTemperature = measurement.temperature;
+    printText(60, 155, COLOR_RGB565_WHITE, 2, strval);
+  }
   Serial.println("Temperature: " + strval);
-  strval = String(measurement.humidity,1) + "%";  
-  printText(0, 200, COLOR_RGB565_WHITE, 2, strval);
+  if (oldHumidity != measurement.humidity){
+    screen.fillRect(0,200,78,20, COLOR_RGB565_BLACK);
+    strval = String(measurement.humidity,1) + "%";  
+    oldHumidity = measurement.humidity;
+    printText(0, 200, COLOR_RGB565_WHITE, 2, strval);
+  }
   Serial.println("Humidity: " + strval);
   //Air Quality Index
   // Technical Assistance Document for the Reporting of Daily Air Quality
   // https://www.airnow.gov/sites/default/files/2020-05/aqi-technical-assistance-document-sept2018.pdf
   
-  String AQI = "0";
+  unsigned int AQI_COLOR;
+  if (PM2_5Value <= 12 && PM10Value <= 54) {
+    if (AQI != "5") {
+      clearAQI();
+      AQI = "5";//Serial.println("Air Quality Index (AQI): Good (Up to 50)");
+      AQI_COLOR = COLOR_RGB565_GREEN;
+      printText(130, 180, COLOR_RGB565_GREEN, 2, "Good");
+      printText(130, 200, COLOR_RGB565_GREEN, 1, "AQI: up to 50");
+      printText(130, 210, COLOR_RGB565_GREEN, 1, "");
+    }
+  }
+  else if (PM2_5Value <= 35.4 && PM10Value <= 154) {
+    if (AQI != "4") {
+      clearAQI();
+      AQI = "4";//Serial.println("Air Quality Index (AQI): Moderate (51 - 100)");
+      AQI_COLOR = COLOR_RGB565_YELLOW;    
+      printText(130, 180, COLOR_RGB565_YELLOW, 2, "Moderate");
+      printText(130, 200, COLOR_RGB565_YELLOW, 1, "AQI: 51-100");
+      printText(130, 210, COLOR_RGB565_YELLOW, 1, "Fair");
+    }
+  }
+  else if (PM2_5Value <= 55.4 && PM10Value <= 254) {
+    if (AQI != "3") {
+      clearAQI();
+      AQI = "3";//Serial.println("Air Quality Index (AQI): Unhealthy for Sensitive Groups (101 - 150)");
+      AQI_COLOR = COLOR_RGB565_ORANGE;
+      printText(130, 180, COLOR_RGB565_ORANGE, 2, "Unhealthy");
+      printText(130, 200, COLOR_RGB565_ORANGE, 1, "AQI: 101-150");
+      printText(130, 210, COLOR_RGB565_ORANGE, 1, "Moderate");
+    }
+  }
+  else if (PM2_5Value <= 150.4 && PM10Value <= 354) {
+    if (AQI != "2") {
+      clearAQI();
+      AQI = "2";//Serial.println("Air Quality Index (AQI): Unhealthy (151 - 200)");
+      //printText(170, 130, COLOR_RGB565_ORANGE, 6, AQI);
+      AQI_COLOR = COLOR_RGB565_ORANGE;    
+      printText(130, 180, COLOR_RGB565_ORANGE, 2, "Unhealthy");
+      printText(130, 200, COLOR_RGB565_ORANGE, 1, "AQI: 151-200");
+      printText(130, 210, COLOR_RGB565_ORANGE, 1, "Poor");
+    }
+  }
+  else if (PM2_5Value <= 250.4 && PM10Value <= 424) {
+    if (AQI != "1") {
+      clearAQI();
+      AQI = "1";// Serial.println("Air Quality Index (AQI): Very Unhealthy (201 - 300)");
+      //printText(170, 130, COLOR_RGB565_RED, 6, AQI);
+      AQI_COLOR = COLOR_RGB565_RED;
+      printText(130, 180, COLOR_RGB565_RED, 2, "Danger");
+      printText(130, 200, COLOR_RGB565_RED, 1, "AQI: 201-300");
+      printText(130, 210, COLOR_RGB565_RED, 1, "Very poor");
+    }
+  }
+  else {
+    if (AQI != "0") {
+      clearAQI();
+      AQI = "0"; //Serial.println("Air Quality Index (AQI): Hazardous (301 - 500)");
+      AQI_COLOR = COLOR_RGB565_RED;
+      printText(130, 180, COLOR_RGB565_RED, 2, "Hazardous");
+      printText(130, 200, COLOR_RGB565_RED, 1, "AQI: 301-500");
+      printText(130, 210, COLOR_RGB565_RED, 1, "Extremely poor");
+    }
+  }
+  printText(170, 130, AQI_COLOR, 6, AQI);
+  Serial.println("AQI: " + AQI);
+}
+
+void clearAQI(){
   screen.fillRect(160,130,52,58, COLOR_RGB565_BLACK);
   screen.fillRect(130,180,120,16, COLOR_RGB565_BLACK);
   screen.fillRect(130,200,120,8, COLOR_RGB565_BLACK);
   screen.fillRect(130,210,120,8, COLOR_RGB565_BLACK);
-  unsigned int AQI_COLOR;
-  if (PM2_5Value <= 12 && PM10Value <= 54) {
-    AQI = "5";//Serial.println("Air Quality Index (AQI): Good (Up to 50)");
-    AQI_COLOR = COLOR_RGB565_GREEN;
-    printText(130, 180, COLOR_RGB565_GREEN, 2, "Good");
-    printText(130, 200, COLOR_RGB565_GREEN, 1, "AQI: up to 50");
-    printText(130, 210, COLOR_RGB565_GREEN, 1, "");
-  }
-  else if (PM2_5Value <= 35.4 && PM10Value <= 154) {
-    AQI = "4";//Serial.println("Air Quality Index (AQI): Moderate (51 - 100)");
-    AQI_COLOR = COLOR_RGB565_YELLOW;    
-    printText(130, 180, COLOR_RGB565_YELLOW, 2, "Moderate");
-    printText(130, 200, COLOR_RGB565_YELLOW, 1, "AQI: 51-100");
-    printText(130, 210, COLOR_RGB565_YELLOW, 1, "Fair");
-  }
-  else if (PM2_5Value <= 55.4 && PM10Value <= 254) {
-    AQI = "3";//Serial.println("Air Quality Index (AQI): Unhealthy for Sensitive Groups (101 - 150)");
-    AQI_COLOR = COLOR_RGB565_ORANGE;
-    printText(130, 180, COLOR_RGB565_ORANGE, 2, "Unhealthy");
-    printText(130, 200, COLOR_RGB565_ORANGE, 1, "AQI: 101-150");
-    printText(130, 210, COLOR_RGB565_ORANGE, 1, "Moderate");
-  }
-  else if (PM2_5Value <= 150.4 && PM10Value <= 354) {
-    AQI = "2";//Serial.println("Air Quality Index (AQI): Unhealthy (151 - 200)");
-    //printText(170, 130, COLOR_RGB565_ORANGE, 6, AQI);
-    AQI_COLOR = COLOR_RGB565_ORANGE;    
-    printText(130, 180, COLOR_RGB565_ORANGE, 2, "Unhealthy");
-    printText(130, 200, COLOR_RGB565_ORANGE, 1, "AQI: 151-200");
-    printText(130, 210, COLOR_RGB565_ORANGE, 1, "Poor");
-  }
-  else if (PM2_5Value <= 250.4 && PM10Value <= 424) {
-    AQI = "1";// Serial.println("Air Quality Index (AQI): Very Unhealthy (201 - 300)");
-    //printText(170, 130, COLOR_RGB565_RED, 6, AQI);
-    AQI_COLOR = COLOR_RGB565_RED;
-    printText(130, 180, COLOR_RGB565_RED, 2, "Danger");
-    printText(130, 200, COLOR_RGB565_RED, 1, "AQI: 201-300");
-    printText(130, 210, COLOR_RGB565_RED, 1, "Very poor");
-  }
-  else {
-    AQI = "0"; //Serial.println("Air Quality Index (AQI): Hazardous (301 - 500)");
-    AQI_COLOR = COLOR_RGB565_RED;
-    printText(130, 180, COLOR_RGB565_RED, 2, "Hazardous");
-    printText(130, 200, COLOR_RGB565_RED, 1, "AQI: 301-500");
-    printText(130, 210, COLOR_RGB565_RED, 1, "Extremely poor");
-  }
-  printText(170, 130, AQI_COLOR, 6, AQI);
-  Serial.println("AQI: " + AQI);
 }
 
 char checkValue(unsigned char *thebuf, char leng)
